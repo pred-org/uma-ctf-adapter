@@ -2,7 +2,7 @@
 pragma solidity 0.8.15;
 
 /**
- * @title RoleBasedCtfAdapter
+ * @title TrustedCtfAdapter
  * @notice Tiny oracle/adapter for Gnosis CTF with AccessControl roles.
  *         - Prepare a condition with this contract as oracle.
  *         - Resolve later (winner index, invalid, or custom vector).

@@ -568,7 +568,7 @@ contract TrustedCtfAdapterTest is TestHelper {
     // ============ Fuzz Tests ============
 
     function testFuzz_InitializeValidSlots(uint8 outcomeSlotCount) public {
-        vm.assume(outcomeSlotCount >= 2 && outcomeSlotCount <= 256);
+        vm.assume(outcomeSlotCount >= 2 && outcomeSlotCount <= 255);
         
         vm.prank(admin);
         adapter.initialize(questionId, outcomeSlotCount);
@@ -580,7 +580,7 @@ contract TrustedCtfAdapterTest is TestHelper {
     }
 
     function testFuzz_ResolveWithIndexValidIndex(uint8 outcomeSlotCount, uint256 winningIndex) public {
-        vm.assume(outcomeSlotCount >= 2 && outcomeSlotCount <= 256);
+        vm.assume(outcomeSlotCount >= 2 && outcomeSlotCount <= 255);
         vm.assume(winningIndex < outcomeSlotCount);
         
         vm.startPrank(admin);

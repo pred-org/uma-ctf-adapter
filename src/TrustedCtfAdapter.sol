@@ -12,12 +12,9 @@ pragma solidity 0.8.15;
  *         conditionId = keccak256(abi.encodePacked(oracle, questionId, outcomeSlotCount))
  *         By preparing with oracle = address(this), only this contract can report payouts.
  */
-interface IConditionalTokens {
-    function prepareCondition(address oracle, bytes32 questionId, uint256 outcomeSlotCount) external;
-    function reportPayouts(bytes32 questionId, uint256[] calldata payoutNumerators) external;
-}
 
 import { AccessControl } from "lib/openzeppelin-contracts/contracts/access/AccessControl.sol";
+import { IConditionalTokens } from "./interfaces/IConditionalTokens.sol";
 
 contract TrustedCtfAdapter is AccessControl {
     // ---- Roles ----
@@ -52,7 +49,7 @@ contract TrustedCtfAdapter is AccessControl {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        require(outcomeSlotCount >= 2 && outcomeSlotCount <= 256, "bad slots");
+        require(outcomeSlotCount >= 2 && outcomeSlotCount <= 255, "bad slots");
         Market storage m = markets[questionId];
         require(!m.prepared, "prepared");
 

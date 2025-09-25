@@ -15,13 +15,24 @@ pragma solidity 0.8.15;
 
 import { AccessControl } from "lib/openzeppelin-contracts/contracts/access/AccessControl.sol";
 import { IConditionalTokens } from "./interfaces/IConditionalTokens.sol";
+import { AncillaryDataLib } from "./libraries/AncillaryDataLib.sol";
 
 contract TrustedCtfAdapter is AccessControl {
+    error InvalidAncillaryData();
+    error AlreadyInitialized();
+
     // ---- Roles ----
     bytes32 public constant RESOLVER_ROLE = keccak256("RESOLVER_ROLE");
 
     // ---- External deps ----
     IConditionalTokens public immutable ctf;
+
+    /// @notice Maximum ancillary data length
+    /// From OOV2 function OO_ANCILLARY_DATA_LIMIT
+    uint256 public constant MAX_ANCILLARY_DATA = 8139;
+
+    /// @notice Mapping of questionID to QuestionData
+    mapping(bytes32 => bytes) public questions;
 
     // ---- Market state ----
     struct Market {
@@ -45,20 +56,28 @@ contract TrustedCtfAdapter is AccessControl {
     }
 
     // ---- Admin: create markets ----
-    function initialize(bytes32 questionId, uint8 outcomeSlotCount)
+    function initialize(bytes memory ancillaryData, uint8 outcomeSlotCount)
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+    returns (bytes32 questionID) {
         require(outcomeSlotCount >= 2 && outcomeSlotCount <= 255, "bad slots");
-        Market storage m = markets[questionId];
+
+        bytes memory data = AncillaryDataLib._appendAncillaryData(msg.sender, ancillaryData);
+        if (ancillaryData.length == 0 || data.length > MAX_ANCILLARY_DATA) revert InvalidAncillaryData();
+
+        questionID = keccak256(data);
+
+        if (_isInitialized(questions[questionID])) revert AlreadyInitialized();
+        
+        Market storage m = markets[questionID];
         require(!m.prepared, "prepared");
 
         m.slots = outcomeSlotCount;
         m.prepared = true;
         m.resolved = false;
 
-        ctf.prepareCondition(address(this), questionId, outcomeSlotCount);
-        emit Initialized(questionId, outcomeSlotCount);
+        ctf.prepareCondition(address(this), questionID, outcomeSlotCount);
+        emit Initialized(questionID, outcomeSlotCount);
     }
 
     // ---- Resolve helpers ----
@@ -132,5 +151,9 @@ contract TrustedCtfAdapter is AccessControl {
         uint256 sum;
         for (uint256 i = 0; i < v.length; i++) sum += v[i];
         require(sum > 0, "zero sum");
+    }
+
+    function _isInitialized(bytes memory ancillaryData) internal pure returns (bool) {
+        return ancillaryData.length > 0;
     }
 }

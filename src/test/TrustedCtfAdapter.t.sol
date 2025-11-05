@@ -79,7 +79,9 @@ contract TrustedCtfAdapterTest is TestHelper {
     bytes32 public questionId2 = keccak256("test-question-2");
     
     event Initialized(bytes32 indexed questionId, uint8 outcomeSlotCount);
-    event Resolved(bytes32 indexed questionId, bytes32 conditionId, uint256[] payoutNumerators);
+    event Resolved(bytes32 indexed questionId, uint256[] payoutNumerators);
+    error AlreadyInitialized();
+    error InvalidPayouts();
 
     function setUp() public {
         mockCtf = new MockConditionalTokens();
@@ -134,7 +136,9 @@ contract TrustedCtfAdapterTest is TestHelper {
         bytes32 returnedQuestionId = adapter.initialize(ancillaryData, outcomeSlotCount);
         
         // Check market state
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertEq(slots, outcomeSlotCount);
         assertTrue(prepared);
         assertFalse(resolved);
@@ -157,13 +161,17 @@ contract TrustedCtfAdapterTest is TestHelper {
         vm.stopPrank();
         
         // Check first market
-        (uint8 slots1, bool prepared1, bool resolved1) = adapter.markets(returnedQuestionId1);
+        (address creator1, bytes memory ancillaryData1Returned, uint8 slots1, bool prepared1, bool resolved1) = adapter.questions(returnedQuestionId1);
+        assertEq(creator1, admin);
+        assertEq(ancillaryData1, ancillaryData1Returned);
         assertEq(slots1, 2);
         assertTrue(prepared1);
         assertFalse(resolved1);
         
         // Check second market
-        (uint8 slots2, bool prepared2, bool resolved2) = adapter.markets(returnedQuestionId2);
+        (address creator2, bytes memory ancillaryData2Returned, uint8 slots2, bool prepared2, bool resolved2) = adapter.questions(returnedQuestionId2);
+        assertEq(creator2, admin);
+        assertEq(ancillaryData2, ancillaryData2Returned);
         assertEq(slots2, 4);
         assertTrue(prepared2);
         assertFalse(resolved2);
@@ -193,16 +201,6 @@ contract TrustedCtfAdapterTest is TestHelper {
         adapter.initialize(ancillaryData, 1); // Test minimum requirement
     }
 
-    function testInitializeRevertAlreadyPrepared() public {
-        vm.startPrank(admin);
-        bytes memory ancillaryData = abi.encode(questionId);
-        adapter.initialize(ancillaryData, 2);
-        
-        vm.expectRevert("prepared");
-        adapter.initialize(ancillaryData, 3);
-        vm.stopPrank();
-    }
-
     // ============ Resolve With Index Tests ============
 
     function testResolveWithIndex() public {
@@ -215,13 +213,15 @@ contract TrustedCtfAdapterTest is TestHelper {
         expectedPayouts[1] = 1;
         expectedPayouts[2] = 0;
         vm.expectEmit(true, true, true, true);
-        emit Resolved(returnedQuestionId, adapter.conditionId(address(adapter), returnedQuestionId, 3), expectedPayouts);
+        emit Resolved(returnedQuestionId, expectedPayouts);
         
         adapter.resolveWithIndex(returnedQuestionId, 1); // Index 1 wins
         vm.stopPrank();
         
         // Check market state
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertEq(slots, 3);
         assertTrue(prepared);
         assertTrue(resolved);
@@ -307,13 +307,15 @@ contract TrustedCtfAdapterTest is TestHelper {
         expectedPayouts[2] = 1;
         
         vm.expectEmit(true, true, true, true);
-        emit Resolved(returnedQuestionId, adapter.conditionId(address(adapter), returnedQuestionId, 3), expectedPayouts);
+        emit Resolved(returnedQuestionId, expectedPayouts);
         
         adapter.resolveInvalid(returnedQuestionId);
         vm.stopPrank();
         
         // Check market state
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertTrue(resolved);
         
         // Check CTF interaction
@@ -366,28 +368,28 @@ contract TrustedCtfAdapterTest is TestHelper {
     function testResolveWithVector() public {
         vm.startPrank(admin);
         bytes memory ancillaryData = abi.encode(questionId);
-        bytes32 returnedQuestionId = adapter.initialize(ancillaryData, 3);
+        bytes32 returnedQuestionId = adapter.initialize(ancillaryData, 2);
         
-        uint256[] memory payouts = new uint256[](3);
-        payouts[0] = 2;
-        payouts[1] = 3;
-        payouts[2] = 1;
+        uint256[] memory payouts = new uint256[](2);
+        payouts[0] = 1;
+        payouts[1] = 0;
         
         vm.expectEmit(true, true, true, true);
-        emit Resolved(returnedQuestionId, adapter.conditionId(address(adapter), returnedQuestionId, 3), payouts);
+        emit Resolved(returnedQuestionId, payouts);
         
         adapter.resolveWithVector(returnedQuestionId, payouts);
         vm.stopPrank();
         
         // Check market state
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertTrue(resolved);
         
         // Check CTF interaction
         assertEq(mockCtf.lastReportedQuestionId(), returnedQuestionId);
-        assertEq(mockCtf.lastReportedPayouts(0), 2);
-        assertEq(mockCtf.lastReportedPayouts(1), 3);
-        assertEq(mockCtf.lastReportedPayouts(2), 1);
+        assertEq(mockCtf.lastReportedPayouts(0), 1);
+        assertEq(mockCtf.lastReportedPayouts(1), 0);
     }
 
     function testResolveWithVectorEqualPayouts() public {
@@ -396,14 +398,14 @@ contract TrustedCtfAdapterTest is TestHelper {
         bytes32 returnedQuestionId = adapter.initialize(ancillaryData, 2);
         
         uint256[] memory payouts = new uint256[](2);
-        payouts[0] = 5;
-        payouts[1] = 5;
+        payouts[0] = 1;
+        payouts[1] = 1;
         
         adapter.resolveWithVector(returnedQuestionId, payouts);
         vm.stopPrank();
         
-        assertEq(mockCtf.lastReportedPayouts(0), 5);
-        assertEq(mockCtf.lastReportedPayouts(1), 5);
+        assertEq(mockCtf.lastReportedPayouts(0), 1);
+        assertEq(mockCtf.lastReportedPayouts(1), 1);
     }
 
     function testResolveWithVectorRevertNotResolver() public {
@@ -467,42 +469,30 @@ contract TrustedCtfAdapterTest is TestHelper {
         bytes memory ancillaryData = abi.encode(questionId);
         bytes32 returnedQuestionId = adapter.initialize(ancillaryData, 3);
         
-        uint256[] memory payouts = new uint256[](3);
+        uint256[] memory payouts = new uint256[](2);
         payouts[0] = 0;
         payouts[1] = 0;
-        payouts[2] = 0;
         
-        vm.expectRevert("zero sum");
+        vm.expectRevert(InvalidPayouts.selector);
         adapter.resolveWithVector(returnedQuestionId, payouts);
         vm.stopPrank();
     }
 
-    // ============ Condition ID Tests ============
+    // ============ Resolve With Vector Tests ============
 
-    function testConditionId() public {
-        bytes32 expectedId = keccak256(abi.encodePacked(address(adapter), questionId, uint8(3)));
-        bytes32 actualId = adapter.conditionId(address(adapter), questionId, 3);
-        assertEq(expectedId, actualId);
+    function testResolveWithVectorRevertInvalidPayouts() public {
+        vm.startPrank(admin);
+        bytes memory ancillaryData = abi.encode(questionId);
+        bytes32 returnedQuestionId = adapter.initialize(ancillaryData, 3);
+        
+        uint256[] memory payouts = new uint256[](2);
+        payouts[0] = 1;
+        payouts[1] = 3;
+        
+        vm.expectRevert(InvalidPayouts.selector);
+        adapter.resolveWithVector(returnedQuestionId, payouts);
+        vm.stopPrank();
     }
-
-    function testConditionIdDifferentOracle() public {
-        bytes32 id1 = adapter.conditionId(address(1), questionId, 3);
-        bytes32 id2 = adapter.conditionId(address(2), questionId, 3);
-        assertTrue(id1 != id2);
-    }
-
-    function testConditionIdDifferentQuestion() public {
-        bytes32 id1 = adapter.conditionId(address(adapter), questionId, 3);
-        bytes32 id2 = adapter.conditionId(address(adapter), questionId2, 3);
-        assertTrue(id1 != id2);
-    }
-
-    function testConditionIdDifferentSlots() public {
-        bytes32 id1 = adapter.conditionId(address(adapter), questionId, 2);
-        bytes32 id2 = adapter.conditionId(address(adapter), questionId, 3);
-        assertTrue(id1 != id2);
-    }
-
     // ============ Edge Cases and Integration Tests ============
 
     function testMultipleResolutionsDifferentMarkets() public {
@@ -522,17 +512,10 @@ contract TrustedCtfAdapterTest is TestHelper {
         invalidPayouts[0] = 1;
         invalidPayouts[1] = 1;
         invalidPayouts[2] = 1;
+
+        vm.expectRevert(InvalidPayouts.selector);
         adapter.resolveWithVector(returnedQuestionId2, invalidPayouts);
-        
         vm.stopPrank();
-        
-        // Check first market
-        (uint8 slots1, bool prepared1, bool resolved1) = adapter.markets(returnedQuestionId1);
-        assertTrue(resolved1);
-        
-        // Check second market
-        (uint8 slots2, bool prepared2, bool resolved2) = adapter.markets(returnedQuestionId2);
-        assertTrue(resolved2);
     }
 
     function testRoleRevocationAndGranting() public {
@@ -559,12 +542,23 @@ contract TrustedCtfAdapterTest is TestHelper {
         adapter.resolveWithIndex(returnedQuestionId, 0);
     }
 
+    function testInitializeRevertAlreadyInitialized() public {
+        vm.startPrank(admin);
+        bytes memory ancillaryData = abi.encode(questionId);
+        adapter.initialize(ancillaryData, 2);
+        vm.expectRevert(AlreadyInitialized.selector);
+        adapter.initialize(ancillaryData, 2);
+        vm.stopPrank();
+    }
+
     function testMaxOutcomeSlots() public {
         vm.prank(admin);
         bytes memory ancillaryData = abi.encode(questionId);
         bytes32 returnedQuestionId = adapter.initialize(ancillaryData, 255); // Maximum allowed for uint8
         
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertEq(slots, 255);
         assertTrue(prepared);
         assertFalse(resolved);
@@ -575,7 +569,9 @@ contract TrustedCtfAdapterTest is TestHelper {
         bytes memory ancillaryData = abi.encode(questionId);
         bytes32 returnedQuestionId = adapter.initialize(ancillaryData, 2); // Minimum allowed
         
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertEq(slots, 2);
         assertTrue(prepared);
         assertFalse(resolved);
@@ -600,7 +596,9 @@ contract TrustedCtfAdapterTest is TestHelper {
         bytes memory ancillaryData = abi.encode(questionId);
         bytes32 returnedQuestionId = adapter.initialize(ancillaryData, outcomeSlotCount);
         
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertEq(slots, outcomeSlotCount);
         assertTrue(prepared);
         assertFalse(resolved);
@@ -616,7 +614,9 @@ contract TrustedCtfAdapterTest is TestHelper {
         adapter.resolveWithIndex(returnedQuestionId, winningIndex);
         vm.stopPrank();
         
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertTrue(resolved);
         
         // Check that only the winning index has payout 1

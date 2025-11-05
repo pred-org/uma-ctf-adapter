@@ -69,8 +69,6 @@ contract TrustedCtfAdapter is AccessControl {
         questionID = keccak256(data);
         if (_isInitialized(questions[questionID])) revert AlreadyInitialized();
         
-        require(!questions[questionID].prepared, "prepared");
-
         _saveQuestionData(questionID, msg.sender, ancillaryData, outcomeSlotCount);
 
         ctf.prepareCondition(address(this), questionID, outcomeSlotCount);

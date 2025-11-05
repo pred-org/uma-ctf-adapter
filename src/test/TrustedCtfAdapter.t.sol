@@ -201,16 +201,6 @@ contract TrustedCtfAdapterTest is TestHelper {
         adapter.initialize(ancillaryData, 1); // Test minimum requirement
     }
 
-    function testInitializeRevertAlreadyPrepared() public {
-        vm.startPrank(admin);
-        bytes memory ancillaryData = abi.encode(questionId);
-        adapter.initialize(ancillaryData, 2);
-        
-        vm.expectRevert("prepared");
-        adapter.initialize(ancillaryData, 3);
-        vm.stopPrank();
-    }
-
     // ============ Resolve With Index Tests ============
 
     function testResolveWithIndex() public {

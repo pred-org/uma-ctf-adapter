@@ -80,6 +80,7 @@ contract TrustedCtfAdapterTest is TestHelper {
     
     event Initialized(bytes32 indexed questionId, uint8 outcomeSlotCount);
     event Resolved(bytes32 indexed questionId, uint256[] payoutNumerators);
+    error AlreadyInitialized();
     error InvalidPayouts();
 
     function setUp() public {
@@ -135,7 +136,9 @@ contract TrustedCtfAdapterTest is TestHelper {
         bytes32 returnedQuestionId = adapter.initialize(ancillaryData, outcomeSlotCount);
         
         // Check market state
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertEq(slots, outcomeSlotCount);
         assertTrue(prepared);
         assertFalse(resolved);
@@ -158,13 +161,17 @@ contract TrustedCtfAdapterTest is TestHelper {
         vm.stopPrank();
         
         // Check first market
-        (uint8 slots1, bool prepared1, bool resolved1) = adapter.markets(returnedQuestionId1);
+        (address creator1, bytes memory ancillaryData1Returned, uint8 slots1, bool prepared1, bool resolved1) = adapter.questions(returnedQuestionId1);
+        assertEq(creator1, admin);
+        assertEq(ancillaryData1, ancillaryData1Returned);
         assertEq(slots1, 2);
         assertTrue(prepared1);
         assertFalse(resolved1);
         
         // Check second market
-        (uint8 slots2, bool prepared2, bool resolved2) = adapter.markets(returnedQuestionId2);
+        (address creator2, bytes memory ancillaryData2Returned, uint8 slots2, bool prepared2, bool resolved2) = adapter.questions(returnedQuestionId2);
+        assertEq(creator2, admin);
+        assertEq(ancillaryData2, ancillaryData2Returned);
         assertEq(slots2, 4);
         assertTrue(prepared2);
         assertFalse(resolved2);
@@ -222,7 +229,9 @@ contract TrustedCtfAdapterTest is TestHelper {
         vm.stopPrank();
         
         // Check market state
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertEq(slots, 3);
         assertTrue(prepared);
         assertTrue(resolved);
@@ -314,7 +323,9 @@ contract TrustedCtfAdapterTest is TestHelper {
         vm.stopPrank();
         
         // Check market state
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertTrue(resolved);
         
         // Check CTF interaction
@@ -380,7 +391,9 @@ contract TrustedCtfAdapterTest is TestHelper {
         vm.stopPrank();
         
         // Check market state
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertTrue(resolved);
         
         // Check CTF interaction
@@ -539,12 +552,23 @@ contract TrustedCtfAdapterTest is TestHelper {
         adapter.resolveWithIndex(returnedQuestionId, 0);
     }
 
+    function testInitializeRevertAlreadyInitialized() public {
+        vm.startPrank(admin);
+        bytes memory ancillaryData = abi.encode(questionId);
+        adapter.initialize(ancillaryData, 2);
+        vm.expectRevert(AlreadyInitialized.selector);
+        adapter.initialize(ancillaryData, 2);
+        vm.stopPrank();
+    }
+
     function testMaxOutcomeSlots() public {
         vm.prank(admin);
         bytes memory ancillaryData = abi.encode(questionId);
         bytes32 returnedQuestionId = adapter.initialize(ancillaryData, 255); // Maximum allowed for uint8
         
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertEq(slots, 255);
         assertTrue(prepared);
         assertFalse(resolved);
@@ -555,7 +579,9 @@ contract TrustedCtfAdapterTest is TestHelper {
         bytes memory ancillaryData = abi.encode(questionId);
         bytes32 returnedQuestionId = adapter.initialize(ancillaryData, 2); // Minimum allowed
         
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertEq(slots, 2);
         assertTrue(prepared);
         assertFalse(resolved);
@@ -580,7 +606,9 @@ contract TrustedCtfAdapterTest is TestHelper {
         bytes memory ancillaryData = abi.encode(questionId);
         bytes32 returnedQuestionId = adapter.initialize(ancillaryData, outcomeSlotCount);
         
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertEq(slots, outcomeSlotCount);
         assertTrue(prepared);
         assertFalse(resolved);
@@ -596,7 +624,9 @@ contract TrustedCtfAdapterTest is TestHelper {
         adapter.resolveWithIndex(returnedQuestionId, winningIndex);
         vm.stopPrank();
         
-        (uint8 slots, bool prepared, bool resolved) = adapter.markets(returnedQuestionId);
+        (address creator, bytes memory ancillaryDataReturned, uint8 slots, bool prepared, bool resolved) = adapter.questions(returnedQuestionId);
+        assertEq(creator, admin);
+        assertEq(ancillaryData, ancillaryDataReturned);
         assertTrue(resolved);
         
         // Check that only the winning index has payout 1

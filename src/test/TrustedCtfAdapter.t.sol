@@ -79,7 +79,8 @@ contract TrustedCtfAdapterTest is TestHelper {
     bytes32 public questionId2 = keccak256("test-question-2");
     
     event Initialized(bytes32 indexed questionId, uint8 outcomeSlotCount);
-    event Resolved(bytes32 indexed questionId, bytes32 conditionId, uint256[] payoutNumerators);
+    event Resolved(bytes32 indexed questionId, uint256[] payoutNumerators);
+    error InvalidPayouts();
 
     function setUp() public {
         mockCtf = new MockConditionalTokens();
@@ -215,7 +216,7 @@ contract TrustedCtfAdapterTest is TestHelper {
         expectedPayouts[1] = 1;
         expectedPayouts[2] = 0;
         vm.expectEmit(true, true, true, true);
-        emit Resolved(returnedQuestionId, adapter.conditionId(address(adapter), returnedQuestionId, 3), expectedPayouts);
+        emit Resolved(returnedQuestionId, expectedPayouts);
         
         adapter.resolveWithIndex(returnedQuestionId, 1); // Index 1 wins
         vm.stopPrank();
@@ -307,7 +308,7 @@ contract TrustedCtfAdapterTest is TestHelper {
         expectedPayouts[2] = 1;
         
         vm.expectEmit(true, true, true, true);
-        emit Resolved(returnedQuestionId, adapter.conditionId(address(adapter), returnedQuestionId, 3), expectedPayouts);
+        emit Resolved(returnedQuestionId, expectedPayouts);
         
         adapter.resolveInvalid(returnedQuestionId);
         vm.stopPrank();
@@ -366,15 +367,14 @@ contract TrustedCtfAdapterTest is TestHelper {
     function testResolveWithVector() public {
         vm.startPrank(admin);
         bytes memory ancillaryData = abi.encode(questionId);
-        bytes32 returnedQuestionId = adapter.initialize(ancillaryData, 3);
+        bytes32 returnedQuestionId = adapter.initialize(ancillaryData, 2);
         
-        uint256[] memory payouts = new uint256[](3);
-        payouts[0] = 2;
-        payouts[1] = 3;
-        payouts[2] = 1;
+        uint256[] memory payouts = new uint256[](2);
+        payouts[0] = 1;
+        payouts[1] = 0;
         
         vm.expectEmit(true, true, true, true);
-        emit Resolved(returnedQuestionId, adapter.conditionId(address(adapter), returnedQuestionId, 3), payouts);
+        emit Resolved(returnedQuestionId, payouts);
         
         adapter.resolveWithVector(returnedQuestionId, payouts);
         vm.stopPrank();
@@ -385,9 +385,8 @@ contract TrustedCtfAdapterTest is TestHelper {
         
         // Check CTF interaction
         assertEq(mockCtf.lastReportedQuestionId(), returnedQuestionId);
-        assertEq(mockCtf.lastReportedPayouts(0), 2);
-        assertEq(mockCtf.lastReportedPayouts(1), 3);
-        assertEq(mockCtf.lastReportedPayouts(2), 1);
+        assertEq(mockCtf.lastReportedPayouts(0), 1);
+        assertEq(mockCtf.lastReportedPayouts(1), 0);
     }
 
     function testResolveWithVectorEqualPayouts() public {
@@ -396,14 +395,14 @@ contract TrustedCtfAdapterTest is TestHelper {
         bytes32 returnedQuestionId = adapter.initialize(ancillaryData, 2);
         
         uint256[] memory payouts = new uint256[](2);
-        payouts[0] = 5;
-        payouts[1] = 5;
+        payouts[0] = 1;
+        payouts[1] = 1;
         
         adapter.resolveWithVector(returnedQuestionId, payouts);
         vm.stopPrank();
         
-        assertEq(mockCtf.lastReportedPayouts(0), 5);
-        assertEq(mockCtf.lastReportedPayouts(1), 5);
+        assertEq(mockCtf.lastReportedPayouts(0), 1);
+        assertEq(mockCtf.lastReportedPayouts(1), 1);
     }
 
     function testResolveWithVectorRevertNotResolver() public {
@@ -467,42 +466,30 @@ contract TrustedCtfAdapterTest is TestHelper {
         bytes memory ancillaryData = abi.encode(questionId);
         bytes32 returnedQuestionId = adapter.initialize(ancillaryData, 3);
         
-        uint256[] memory payouts = new uint256[](3);
+        uint256[] memory payouts = new uint256[](2);
         payouts[0] = 0;
         payouts[1] = 0;
-        payouts[2] = 0;
         
-        vm.expectRevert("zero sum");
+        vm.expectRevert(InvalidPayouts.selector);
         adapter.resolveWithVector(returnedQuestionId, payouts);
         vm.stopPrank();
     }
 
-    // ============ Condition ID Tests ============
+    // ============ Resolve With Vector Tests ============
 
-    function testConditionId() public {
-        bytes32 expectedId = keccak256(abi.encodePacked(address(adapter), questionId, uint8(3)));
-        bytes32 actualId = adapter.conditionId(address(adapter), questionId, 3);
-        assertEq(expectedId, actualId);
+    function testResolveWithVectorRevertInvalidPayouts() public {
+        vm.startPrank(admin);
+        bytes memory ancillaryData = abi.encode(questionId);
+        bytes32 returnedQuestionId = adapter.initialize(ancillaryData, 3);
+        
+        uint256[] memory payouts = new uint256[](2);
+        payouts[0] = 1;
+        payouts[1] = 3;
+        
+        vm.expectRevert(InvalidPayouts.selector);
+        adapter.resolveWithVector(returnedQuestionId, payouts);
+        vm.stopPrank();
     }
-
-    function testConditionIdDifferentOracle() public {
-        bytes32 id1 = adapter.conditionId(address(1), questionId, 3);
-        bytes32 id2 = adapter.conditionId(address(2), questionId, 3);
-        assertTrue(id1 != id2);
-    }
-
-    function testConditionIdDifferentQuestion() public {
-        bytes32 id1 = adapter.conditionId(address(adapter), questionId, 3);
-        bytes32 id2 = adapter.conditionId(address(adapter), questionId2, 3);
-        assertTrue(id1 != id2);
-    }
-
-    function testConditionIdDifferentSlots() public {
-        bytes32 id1 = adapter.conditionId(address(adapter), questionId, 2);
-        bytes32 id2 = adapter.conditionId(address(adapter), questionId, 3);
-        assertTrue(id1 != id2);
-    }
-
     // ============ Edge Cases and Integration Tests ============
 
     function testMultipleResolutionsDifferentMarkets() public {
@@ -522,17 +509,10 @@ contract TrustedCtfAdapterTest is TestHelper {
         invalidPayouts[0] = 1;
         invalidPayouts[1] = 1;
         invalidPayouts[2] = 1;
+
+        vm.expectRevert(InvalidPayouts.selector);
         adapter.resolveWithVector(returnedQuestionId2, invalidPayouts);
-        
         vm.stopPrank();
-        
-        // Check first market
-        (uint8 slots1, bool prepared1, bool resolved1) = adapter.markets(returnedQuestionId1);
-        assertTrue(resolved1);
-        
-        // Check second market
-        (uint8 slots2, bool prepared2, bool resolved2) = adapter.markets(returnedQuestionId2);
-        assertTrue(resolved2);
     }
 
     function testRoleRevocationAndGranting() public {

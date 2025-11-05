@@ -16,10 +16,11 @@ pragma solidity 0.8.15;
 import { AccessControl } from "lib/openzeppelin-contracts/contracts/access/AccessControl.sol";
 import { IConditionalTokens } from "./interfaces/IConditionalTokens.sol";
 import { AncillaryDataLib } from "./libraries/AncillaryDataLib.sol";
+import { PayoutHelperLib } from "./libraries/PayoutHelperLib.sol";
 
 contract TrustedCtfAdapter is AccessControl {
     error InvalidAncillaryData();
-    error AlreadyInitialized();
+    error InvalidPayouts();
 
     // ---- Roles ----
     bytes32 public constant RESOLVER_ROLE = keccak256("RESOLVER_ROLE");
@@ -44,7 +45,7 @@ contract TrustedCtfAdapter is AccessControl {
 
     // ---- Events ----
     event Initialized(bytes32 indexed questionId, uint8 outcomeSlotCount);
-    event Resolved(bytes32 indexed questionId, bytes32 conditionId, uint256[] payoutNumerators);
+    event Resolved(bytes32 indexed questionId, uint256[] payoutNumerators);
 
     // ---- Ctor ----
     constructor(address _ctf, address admin) {
@@ -66,8 +67,6 @@ contract TrustedCtfAdapter is AccessControl {
         if (ancillaryData.length == 0 || data.length > MAX_ANCILLARY_DATA) revert InvalidAncillaryData();
 
         questionID = keccak256(data);
-
-        if (_isInitialized(questions[questionID])) revert AlreadyInitialized();
         
         Market storage m = markets[questionID];
         require(!m.prepared, "prepared");
@@ -95,7 +94,7 @@ contract TrustedCtfAdapter is AccessControl {
 
         m.resolved = true;
         ctf.reportPayouts(questionId, p);
-        emit Resolved(questionId, conditionId(address(this), questionId, m.slots), p);
+        emit Resolved(questionId, p);
     }
 
     /// @notice Resolve as invalid: all outcomes redeem equally.
@@ -110,7 +109,7 @@ contract TrustedCtfAdapter is AccessControl {
 
         m.resolved = true;
         ctf.reportPayouts(questionId, p);
-        emit Resolved(questionId, conditionId(address(this), questionId, m.slots), p);
+        emit Resolved(questionId, p);
     }
 
     /// @notice Resolve with a custom payout vector (length==slots, sum>0).
@@ -119,20 +118,12 @@ contract TrustedCtfAdapter is AccessControl {
         onlyRole(RESOLVER_ROLE)
     {
         Market storage m = _needPreparedNotResolved(questionId);
+        if (!_isValidPayoutArray(payoutNumerators)) revert InvalidPayouts();
         _checkPayouts(payoutNumerators, m.slots);
 
         m.resolved = true;
         ctf.reportPayouts(questionId, payoutNumerators);
-        emit Resolved(questionId, conditionId(address(this), questionId, m.slots), payoutNumerators);
-    }
-
-    // ---- Views ----
-    function conditionId(address oracle, bytes32 questionId, uint8 outcomeSlotCount)
-        public
-        pure
-        returns (bytes32)
-    {
-        return keccak256(abi.encodePacked(oracle, questionId, outcomeSlotCount));
+        emit Resolved(questionId, payoutNumerators);
     }
 
     // ---- Internals ----
@@ -155,5 +146,11 @@ contract TrustedCtfAdapter is AccessControl {
 
     function _isInitialized(bytes memory ancillaryData) internal pure returns (bool) {
         return ancillaryData.length > 0;
+    }
+
+    /// @notice Validates a payout array from the admin
+    /// @param payouts - The payout array
+    function _isValidPayoutArray(uint256[] calldata payouts) internal pure returns (bool) {
+        return PayoutHelperLib.isValidPayoutArray(payouts);
     }
 }

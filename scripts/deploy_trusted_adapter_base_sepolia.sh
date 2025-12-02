@@ -7,41 +7,75 @@ set -e
 
 # Source environment variables
 if [ -f .env ]; then
+    # shellcheck disable=SC1091
     source .env
-    # Handle different private key variable names
-    if [ -n "$PRIVATE_KEY" ] && [ -z "$PK" ]; then
-        PK=$PRIVATE_KEY
-    fi
-else
-    echo "Error: .env file not found. Please create one with the required variables."
-    echo "Required variables:"
-    echo "  PRIVATE_KEY=your_private_key"
-    echo "  RPC_URL=https://base-sepolia.g.alchemy.com/v2/your_key"
-    echo "  ETHERSCAN_API_KEY=your_etherscan_api_key"
+fi
+
+# Handle different private key variable names
+if [ -n "$PRIVATE_KEY" ] && [ -z "$PK" ]; then
+    PK=$PRIVATE_KEY
+fi
+
+# Validate required environment variables
+if [ -z "$PK" ] && [ -z "$PRIVATE_KEY" ]; then
+    echo "Error: PK or PRIVATE_KEY must be set in the environment."
+    echo "Set it in .env file or export it: export PK=your_private_key"
     exit 1
 fi
 
-# Set Base Sepolia specific values
-CTF_ADDRESS="0xb04639fB29CC8D27e13727c249EbcAb0CDA92331"
-ADMIN="0x7496014dd7ec0C825c3BC1e91bd5C01E2961318B"
-CHAIN_ID="84532"  # Base Sepolia chain ID
+if [ -z "$RPC_URL" ]; then
+    echo "Error: RPC_URL must be set in the environment."
+    echo "Set it in .env file or export it: export RPC_URL=https://base-sepolia.g.alchemy.com/v2/your_key"
+    exit 1
+fi
+
+if [ -z "$ETHERSCAN_API_KEY" ]; then
+    echo "Error: ETHERSCAN_API_KEY must be set in the environment."
+    echo "Set it in .env file or export it: export ETHERSCAN_API_KEY=your_basescan_api_key"
+    exit 1
+fi
+
+if [ -z "$CTF_ADDRESS" ]; then
+    echo "Error: CTF_ADDRESS must be set in the environment."
+    echo "Set it in .env file or export it: export CTF_ADDRESS=conditional_tokens_framework_address"
+    exit 1
+fi
+
+# Use PK if set, otherwise use PRIVATE_KEY
+PK=${PK:-"$PRIVATE_KEY"}
+
 
 echo "Deploying TrustedCtfAdapter on Base Sepolia..."
 echo "Deploy args:"
 echo "  ConditionalTokensFramework: $CTF_ADDRESS"
-echo "  Admin: $ADMIN"
+if [ -n "$ADMIN" ]; then
+    echo "  Admin: $ADMIN"
+    echo "  Using custom admin address"
+else
+    echo "  Admin: deployer (msg.sender)"
+    echo "  Using deployer as admin"
+fi
 echo "  RPC URL: $RPC_URL"
 echo "  Chain ID: $CHAIN_ID"
 echo ""
 
 # Deploy the contract
 echo "Deploying contract..."
-OUTPUT="$(forge script DeployTrustedCtfAdapter \
-    --private-key $PK \
-    --rpc-url $RPC_URL \
-    --json \
-    --broadcast \
-    -s "deploy(address,address)" $CTF_ADDRESS $ADMIN)"
+if [ -n "$ADMIN" ]; then
+    OUTPUT="$(forge script DeployTrustedCtfAdapter \
+        --private-key "$PK" \
+        --rpc-url "$RPC_URL" \
+        --json \
+        --broadcast \
+        -s "deploy(address,address)" "$CTF_ADDRESS" "$ADMIN")"
+else
+    OUTPUT="$(forge script DeployTrustedCtfAdapter \
+        --private-key "$PK" \
+        --rpc-url "$RPC_URL" \
+        --json \
+        --broadcast \
+        -s "deployWithDefaultAdmin(address)" "$CTF_ADDRESS")"
+fi
 
 # Extract the deployed contract address
 ADAPTER=$(echo "$OUTPUT" | grep "{" | jq -r '.returns.adapter.value // empty')
@@ -63,10 +97,10 @@ sleep 15
 # Verify the contract
 echo "Verifying contract on Base Sepolia..."
 VERIFY_OUTPUT="$(forge verify-contract \
-    $ADAPTER \
+    "$ADAPTER" \
     src/TrustedCtfAdapter.sol:TrustedCtfAdapter \
-    --chain $CHAIN_ID \
-    --etherscan-api-key $ETHERSCAN_API_KEY \
+    --chain "$CHAIN_ID" \
+    --etherscan-api-key "$ETHERSCAN_API_KEY" \
     --watch)"
 
 echo "$VERIFY_OUTPUT"
@@ -75,7 +109,7 @@ if echo "$VERIFY_OUTPUT" | grep -q "Contract successfully verified"; then
     echo ""
     echo "✅ Deployment and verification completed successfully!"
     echo "Contract address: $ADAPTER"
-    echo "View on Base Sepolia Explorer: https://sepolia.basescan.org/address/$ADAPTER"
+    echo "View on Base Sepolia Explorer: $EXPLORER_URL/address/$ADAPTER"
 else
     echo ""
     echo "⚠️  Contract deployed but verification may have failed."

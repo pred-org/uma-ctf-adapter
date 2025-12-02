@@ -26,5 +26,8 @@
     "devDependencies": {
         "prettier": "^2.5.1",
         "prettier-plugin-solidity": "^1.0.0-beta.19"
+    },
+    "dependencies": {
+        "ethers": "^6.15.0"
     }
 }

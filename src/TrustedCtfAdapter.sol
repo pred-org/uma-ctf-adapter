@@ -8,6 +8,7 @@ pragma solidity 0.8.15;
  *         - Resolve later (winner index, invalid, or custom vector).
  *         - DEFAULT_ADMIN_ROLE: initialize markets + manage roles
  *         - RESOLVER_ROLE: resolve markets
+ *         - BulletinBoard: allows anyone to post updates for questions
  *
  *         conditionId = keccak256(abi.encodePacked(oracle, questionId, outcomeSlotCount))
  *         By preparing with oracle = address(this), only this contract can report payouts.
@@ -17,8 +18,9 @@ import { AccessControl } from "lib/openzeppelin-contracts/contracts/access/Acces
 import { IConditionalTokens } from "./interfaces/IConditionalTokens.sol";
 import { AncillaryDataLib } from "./libraries/AncillaryDataLib.sol";
 import { PayoutHelperLib } from "./libraries/PayoutHelperLib.sol";
+import { BulletinBoard } from "./mixins/BulletinBoard.sol";
 
-contract TrustedCtfAdapter is AccessControl {
+contract TrustedCtfAdapter is AccessControl, BulletinBoard {
     error InvalidAncillaryData();
     error AlreadyInitialized();
     error InvalidPayouts();

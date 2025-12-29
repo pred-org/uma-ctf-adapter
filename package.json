@@ -1,6 +1,6 @@
 {
     "name": "@polymarket/uma-ctf-adapter",
-    "description": "Contracts to resolve Polymarket prediction markets via UMA's Optimistic Oracle",
+    "description": "Contracts to resolve PRED prediction markets via UMA's Optimistic Oracle",
     "version": "3.0.0",
     "contributors": [
         {

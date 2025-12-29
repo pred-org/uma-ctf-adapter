@@ -18,11 +18,6 @@ When a new market is deployed, it is `initialized`, meaning:
 
 PRED's centralized Oracle will process the request and provide resolution data. Once the resolution data is available, anyone can call `resolve` which resolves the market using the resolution data.
 
-
-## Audit 
-
-These contracts have been audited by OpenZeppelin and the report is available [here](./audit/Polymarket_UMA_Optimistic_Oracle_Adapter_Audit.pdf).
-
 ## Deployments
 
 See [Deployments](https://github.com/pred-org/uma-ctf-adapter/releases)
